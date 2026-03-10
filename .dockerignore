@@ -1,0 +1,10 @@
+node_modules/
+coverage/
+.git/
+.gitignore
+*.md
+.eslintrc.json
+Dockerfile
+.dockerignore
+scripts/
+docs/
