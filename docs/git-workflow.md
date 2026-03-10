@@ -8,30 +8,49 @@ desde a criação de uma branch até o merge em produção.
 ## Modelo de Branches
 
 ```
-main       ← produção (protegida, aceita apenas PR de dev)
-  └── dev  ← homologação (aceita PR de feat/*, fix/*, refactor/*)
-        ├── feat/nome-da-funcionalidade
-        ├── fix/descricao-do-bug
-        └── refactor/area-refatorada
+main  ←── produção (fonte de verdade)
+ │
+ ├── feat/nome-da-funcionalidade
+ │     ├── PR #1 → dev   (validação em homologação)
+ │     └── PR #2 → main  (promoção para produção, após validação)
+ │
+ ├── fix/descricao-do-bug
+ │     ├── PR #1 → dev
+ │     └── PR #2 → main
+ │
+ └── refactor/area-refatorada
+       ├── PR #1 → dev
+       └── PR #2 → main
+
+dev  ←── homologação (recebe PRs para validação, nunca vai direto para main)
 ```
 
-| Branch       | Propósito                           | Pode fazer push direto? |
-|--------------|-------------------------------------|-------------------------|
-| `main`       | Produção                            | Não — somente via PR    |
-| `dev`        | Homologação / staging               | Não — somente via PR    |
-| `feat/*`     | Nova funcionalidade                 | Sim                     |
-| `fix/*`      | Correção de bug                     | Sim                     |
-| `refactor/*` | Refatoração sem mudança de behavior | Sim                     |
+### Regras fundamentais
+
+| Branch       | Propósito                               | Criada a partir de | Merge para       |
+|--------------|-----------------------------------------|--------------------|------------------|
+| `main`       | Produção — código estável               | —                  | —                |
+| `dev`        | Homologação — validação antes de produção | —                | —                |
+| `feat/*`     | Nova funcionalidade                     | `main`             | `dev` → `main`   |
+| `fix/*`      | Correção de bug                         | `main`             | `dev` → `main`   |
+| `refactor/*` | Refatoração sem mudança de comportamento | `main`            | `dev` → `main`   |
+
+### Por que criar a branch a partir de main?
+
+- A `main` sempre contém o código mais estável (produção)
+- Garante que a feature foi desenvolvida sobre uma base sólida
+- A `dev` acumula múltiplas features em paralelo; partir dela pode incluir código inacabado de outras branches
+- O merge final para `main` é feito pela **mesma branch de feature**, não por `dev` — isso impede que bugs acumulados em `dev` cheguem à produção
 
 ---
 
 ## 1. Criando uma Branch de Desenvolvimento
 
-Sempre crie sua branch a partir de `dev` (e nunca de `main` diretamente):
+Sempre crie a branch a partir de `main`:
 
 ```bash
-git checkout dev
-git pull origin dev
+git checkout main
+git pull origin main
 git checkout -b feat/nome-da-funcionalidade
 ```
 
@@ -77,7 +96,7 @@ O Cursor permite referenciar branches diretamente no chat para análise de códi
 1. Abra o painel de chat do Cursor (`Ctrl+L` ou `Cmd+L`)
 2. Digite `@` e selecione a branch ou arquivo que deseja revisar
 3. Faça perguntas como:
-   - _"Revise as mudanças nesta branch em relação a dev"_
+   - _"Revise as mudanças nesta branch em relação a main"_
    - _"Existe algum problema de segurança neste controller?"_
    - _"Esta implementação segue as boas práticas de Express?"_
 
@@ -85,27 +104,66 @@ O Cursor permite referenciar branches diretamente no chat para análise de códi
 
 ```
 1. Terminar implementação na feat branch
-2. git diff dev...HEAD  → ver todas as mudanças
+2. git diff main...HEAD  → ver todas as mudanças
 3. Abrir Cursor Chat → @Branch → pedir revisão
 4. Corrigir feedbacks
 5. Rodar npm test && npm run lint
-6. Abrir PR
+6. Abrir PR para dev
 ```
 
 ---
 
-## 4. Abrindo PR para dev (Feature → Dev)
+## 4. Fluxo completo: feature → dev → main
+
+```
+main ──────────────────────────────────────────────────► main
+  │                                                        ▲
+  └── feat/minha-feature                                   │
+            │                                              │
+            ├── PR #1 ──► dev  (CI roda, time valida)      │
+            │                                              │
+            └── PR #2 ──────────────────────────────────► main
+                         (mesma branch, após validação em dev)
+```
+
+### Passo a passo
+
+**1. Criar branch a partir de main:**
+
+```bash
+git checkout main
+git pull origin main
+git checkout -b feat/minha-feature
+```
+
+**2. Desenvolver, commitar e abrir PR para dev:**
+
+```bash
+# ... desenvolvimento ...
+git add .
+git commit -m "feat: descrição da mudança"
+bash scripts/create-pr-dev.sh
+```
+
+**3. Validar em dev** — o CI roda, o time testa em homologação.
+
+**4. Abrir PR da mesma branch para main:**
+
+```bash
+bash scripts/create-pr-main.sh
+```
+
+**5. Aprovação e merge em main** — deploy para produção.
+
+---
+
+## 5. Abrindo PR para dev
 
 ### Opção A — Script automatizado
 
 ```bash
 bash scripts/create-pr-dev.sh
 ```
-
-O script irá:
-- Validar o prefixo da branch
-- Fazer push automaticamente
-- Criar o PR com título e checklist gerados automaticamente
 
 ### Opção B — GitHub CLI manual
 
@@ -115,44 +173,38 @@ git push origin feat/sua-branch
 gh pr create \
   --base dev \
   --head feat/sua-branch \
-  --title "feat: descrição da funcionalidade" \
-  --body "Descrição das mudanças"
+  --title "feat: descrição da funcionalidade"
 ```
-
-### Opção C — Interface GitHub
-
-1. Acesse o repositório no GitHub
-2. Clique em **"Compare & pull request"**
-3. Defina base como `dev`
-4. Preencha o título e descrição
-5. Clique em **"Create pull request"**
 
 ---
 
-## 5. Fluxo dev → main (Homologação → Produção)
+## 6. Abrindo PR para main (após validação em dev)
 
-Após validação em `dev`, o merge para `main` segue o mesmo processo via PR,
-mas com mais rigor:
+### Opção A — Script automatizado
+
+```bash
+bash scripts/create-pr-main.sh
+```
+
+### Opção B — GitHub CLI manual
 
 ```bash
 gh pr create \
   --base main \
-  --head dev \
-  --title "release: versão X.Y.Z" \
-  --body "## Changelog\n\n- feat: ...\n- fix: ..."
+  --head feat/sua-branch \
+  --title "feat: descrição da funcionalidade"
 ```
 
-**Checklist obrigatório antes de fazer PR dev → main:**
+**Checklist obrigatório antes de fazer PR para main:**
 
-- [ ] Todos os testes passando no CI
+- [ ] CI passou no PR para dev
+- [ ] Testado e validado em homologação
 - [ ] Code review aprovado por pelo menos 1 pessoa
 - [ ] Sem conflitos com `main`
-- [ ] Testado em ambiente de homologação
-- [ ] CHANGELOG atualizado (se aplicável)
 
 ---
 
-## 6. Resolvendo Conflitos com o Cursor
+## 7. Resolvendo Conflitos com o Cursor
 
 Conflitos ocorrem quando duas branches modificam o mesmo trecho de código.
 
@@ -162,53 +214,50 @@ Conflitos ocorrem quando duas branches modificam o mesmo trecho de código.
 # 1. Esteja na sua branch de feature
 git checkout feat/minha-feature
 
-# 2. Atualize a referência de dev
+# 2. Atualize a referência de main
 git fetch origin
 
-# 3. Faça rebase ou merge de dev na sua branch
-git rebase origin/dev
-# ou, se preferir merge:
-# git merge origin/dev
+# 3. Faça rebase de main na sua branch
+git rebase origin/main
 ```
 
 Se houver conflitos, o Git marcará os arquivos:
 
 ```
-<<<<<<< HEAD (suas mudanças)
+<<<<<<< HEAD (código atual de main)
 const users = [];
 =======
 const users = [{ id: 1, name: 'seed' }];
->>>>>>> origin/dev (mudanças de dev)
+>>>>>>> origin/main
 ```
 
 ### Usando o Cursor para resolver conflitos:
 
 1. Abra o arquivo com conflito no Cursor
-2. O editor irá exibir os marcadores de conflito com destaque visual
+2. O editor exibe os marcadores com destaque visual
 3. Clique em **"Accept Current"**, **"Accept Incoming"** ou **"Accept Both"**
 4. Para conflitos complexos, abra o Cursor Chat e pergunte:
    - _"Ajude-me a resolver este conflito mantendo ambas as funcionalidades"_
-   - _"Qual versão deste código faz mais sentido para o contexto atual?"_
 5. Após resolver todos os conflitos:
 
 ```bash
 git add .
 git rebase --continue
-# ou, se usou merge:
-# git commit
+git push origin feat/minha-feature --force-with-lease
 ```
 
 ---
 
-## 7. Referência Rápida de Comandos
+## 8. Referência Rápida de Comandos
 
 | Ação                           | Comando                                        |
 |--------------------------------|------------------------------------------------|
-| Criar branch de feature        | `git checkout -b feat/nome`                    |
-| Atualizar branch com dev       | `git rebase origin/dev`                        |
-| Ver commits não merged         | `git log origin/dev..HEAD --oneline`           |
-| Ver diff completo              | `git diff origin/dev...HEAD`                   |
+| Criar branch de feature        | `git checkout main && git checkout -b feat/nome` |
+| Atualizar branch com main      | `git rebase origin/main`                       |
+| Ver commits não merged         | `git log origin/main..HEAD --oneline`          |
+| Ver diff completo              | `git diff origin/main...HEAD`                  |
 | Criar PR para dev              | `bash scripts/create-pr-dev.sh`                |
+| Criar PR para main             | `bash scripts/create-pr-main.sh`               |
 | Listar PRs abertos             | `gh pr list`                                   |
 | Ver status do PR               | `gh pr status`                                 |
 | Fazer checkout de um PR        | `gh pr checkout <número>`                      |
