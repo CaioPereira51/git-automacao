@@ -120,29 +120,38 @@ Se qualquer etapa falhar, o PR fica bloqueado.
 ## Workflow de Branches
 
 ```
-main       ← produção
-  └── dev  ← homologação
-        ├── feat/*
-        ├── fix/*
-        └── refactor/*
+main  ←── produção (fonte de verdade)
+ │
+ ├── feat/* ──► PR para dev (validação) ──► PR para main (produção)
+ ├── fix/*  ──► PR para dev (validação) ──► PR para main (produção)
+ └── refactor/* ► PR para dev (validação) ──► PR para main (produção)
+
+dev  ←── homologação (nunca vai direto para main)
 ```
+
+As branches sempre são criadas a partir de `main`. Após desenvolvimento,
+a branch entra em `dev` para validação e, depois de aprovada, a **mesma branch**
+faz merge diretamente em `main` — nunca `dev → main`.
 
 **Iniciar nova funcionalidade:**
 
 ```bash
-git checkout dev
-git pull origin dev
+git checkout main
+git pull origin main
 git checkout -b feat/nome-da-funcionalidade
 ```
 
-**Abrir PR para dev automaticamente:**
+**Abrir PR para dev (validação em homologação):**
 
 ```bash
 bash scripts/create-pr-dev.sh
 ```
 
-O script valida o prefixo da branch, faz push e cria o PR com título e
-checklist preenchidos.
+**Abrir PR para main (após validação):**
+
+```bash
+bash scripts/create-pr-main.sh
+```
 
 > Consulte o guia completo em [docs/git-workflow.md](docs/git-workflow.md).
 

@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
-# Cria automaticamente um Pull Request para a branch dev usando o GitHub CLI.
+# Cria automaticamente um Pull Request para main (produção) usando o GitHub CLI.
 #
 # Fluxo esperado:
 #   1. Branch criada a partir de main
-#   2. Este script abre PR para dev (validação em homologação)
-#   3. Após validação, use create-pr-main.sh para promover para produção
+#   2. PR para dev já foi criado e validado (create-pr-dev.sh)
+#   3. Este script promove a mesma branch para produção via PR para main
 set -euo pipefail
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+CYAN='\033[0;36m'
 NC='\033[0m'
 
 log_info()    { echo -e "${BLUE}[INFO]${NC}  $1"; }
 log_success() { echo -e "${GREEN}[OK]${NC}    $1"; }
-log_warn()    { echo -e "${YELLOW}[AVISO]${NC} $1"; }
 log_error()   { echo -e "${RED}[ERRO]${NC}  $1"; }
 
 # --- Verificações de ambiente ---
@@ -40,7 +40,7 @@ fi
 # --- Detecção da branch ---
 
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-TARGET_BRANCH="dev"
+TARGET_BRANCH="main"
 
 log_info "Branch atual: ${CURRENT_BRANCH}"
 log_info "Branch alvo:  ${TARGET_BRANCH}"
@@ -58,13 +58,42 @@ done
 if [ "$VALID" = false ]; then
   log_error "Branch '${CURRENT_BRANCH}' não tem um prefixo válido."
   log_info  "Prefixos aceitos: feat/, fix/, refactor/"
-  log_info  "Exemplo: feat/adicionar-endpoint-produtos"
   exit 1
 fi
 
-if [ "$CURRENT_BRANCH" = "$TARGET_BRANCH" ] || [ "$CURRENT_BRANCH" = "main" ]; then
+if [ "$CURRENT_BRANCH" = "main" ] || [ "$CURRENT_BRANCH" = "dev" ]; then
   log_error "Não é possível criar PR a partir da branch '${CURRENT_BRANCH}'."
   exit 1
+fi
+
+# --- Verificar se já existe PR aberto para dev ---
+
+log_info "Verificando PR existente para dev..."
+
+PR_DEV=$(gh pr list --head "$CURRENT_BRANCH" --base dev --state merged --json number,url --jq '.[0].url' 2>/dev/null || true)
+
+if [ -z "$PR_DEV" ]; then
+  PR_DEV_OPEN=$(gh pr list --head "$CURRENT_BRANCH" --base dev --state open --json number,url --jq '.[0].url' 2>/dev/null || true)
+  if [ -n "$PR_DEV_OPEN" ]; then
+    echo -e "${YELLOW}[AVISO]${NC} Existe um PR aberto para dev que ainda não foi mergeado:"
+    echo -e "  ${PR_DEV_OPEN}"
+    echo ""
+    read -r -p "Deseja continuar mesmo assim? (s/N) " CONFIRM
+    if [[ ! "$CONFIRM" =~ ^[Ss]$ ]]; then
+      log_info "Operação cancelada."
+      exit 0
+    fi
+  else
+    echo -e "${YELLOW}[AVISO]${NC} Nenhum PR mergeado para dev encontrado nesta branch."
+    echo ""
+    read -r -p "Deseja continuar sem validação em dev? (s/N) " CONFIRM
+    if [[ ! "$CONFIRM" =~ ^[Ss]$ ]]; then
+      log_info "Execute primeiro: bash scripts/create-pr-dev.sh"
+      exit 0
+    fi
+  fi
+else
+  log_success "PR para dev encontrado e mergeado: ${PR_DEV}"
 fi
 
 # --- Push da branch ---
@@ -74,14 +103,11 @@ log_info "Fazendo push da branch para o repositório remoto..."
 if git push origin "$CURRENT_BRANCH" 2>&1; then
   log_success "Push realizado com sucesso."
 else
-  log_error "Falha ao fazer push. Verifique sua conexão e permissões."
+  log_error "Falha ao fazer push."
   exit 1
 fi
 
-# --- Geração automática do título e corpo do PR ---
-
-BRANCH_DESCRIPTION="${CURRENT_BRANCH#*/}"
-BRANCH_DESCRIPTION="${BRANCH_DESCRIPTION//-/ }"
+# --- Geração do título e corpo do PR ---
 
 COMMITS=$(git log "origin/main..HEAD" --oneline 2>/dev/null || echo "Sem commits listados")
 
@@ -90,7 +116,7 @@ PR_TITLE="$(echo "${CURRENT_BRANCH}" | sed 's/\// /') → ${TARGET_BRANCH}"
 PR_BODY="## Descrição
 
 Branch: \`${CURRENT_BRANCH}\`
-Alvo: \`${TARGET_BRANCH}\`
+Alvo: \`${TARGET_BRANCH}\` (produção)
 
 ## Commits incluídos
 
@@ -98,13 +124,13 @@ Alvo: \`${TARGET_BRANCH}\`
 ${COMMITS}
 \`\`\`
 
-## Checklist
+## Checklist de produção
 
-- [ ] Código revisado
-- [ ] Testes passando localmente (\`npm test\`)
-- [ ] Lint sem erros (\`npm run lint\`)
-- [ ] Sem conflitos com \`${TARGET_BRANCH}\`
-- [ ] Branch criada a partir de \`main\` (não de \`dev\`)
+- [ ] PR para \`dev\` foi mergeado e validado em homologação
+- [ ] CI passou (lint + testes)
+- [ ] Code review aprovado
+- [ ] Sem conflitos com \`main\`
+- [ ] CHANGELOG atualizado (se aplicável)
 "
 
 # --- Criação do PR ---
@@ -119,11 +145,8 @@ PR_URL=$(gh pr create \
   2>&1)
 
 if [ $? -eq 0 ]; then
-  log_success "Pull Request criado com sucesso!"
+  log_success "Pull Request para produção criado com sucesso!"
   echo -e "${GREEN}${PR_URL}${NC}"
-  echo ""
-  echo -e "${YELLOW}Próximo passo:${NC} após validação em dev, execute:"
-  echo -e "  ${CYAN}bash scripts/create-pr-main.sh${NC}"
 else
   log_error "Falha ao criar o Pull Request."
   echo "$PR_URL"
