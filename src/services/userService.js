@@ -1,10 +1,9 @@
 let users = [
-  { id: 1, name: 'Carlos Backend', email: 'carlos@example.com', createdAt: new Date('2025-01-01').toISOString() },
-  { id: 2, name: 'Diana Dev', email: 'diana@example.com', createdAt: new Date('2025-01-15').toISOString() },
-  { id: 3, name: 'Eduardo API', email: 'eduardo@example.com', createdAt: new Date('2025-02-01').toISOString() },
+  { id: 1, name: 'Alice Silva', email: 'alice@example.com', createdAt: new Date('2025-01-01').toISOString() },
+  { id: 2, name: 'Bob Souza', email: 'bob@example.com', createdAt: new Date('2025-01-15').toISOString() },
 ];
 
-let nextId = 4;
+let nextId = 3;
 
 function getAllUsers() {
   return users;
@@ -37,11 +36,10 @@ function createUser({ name, email }) {
 
 function resetUsers() {
   users = [
-    { id: 1, name: 'Carlos Backend', email: 'carlos@example.com', createdAt: new Date('2025-01-01').toISOString() },
-    { id: 2, name: 'Diana Dev', email: 'diana@example.com', createdAt: new Date('2025-01-15').toISOString() },
-    { id: 3, name: 'Eduardo API', email: 'eduardo@example.com', createdAt: new Date('2025-02-01').toISOString() },
+    { id: 1, name: 'Alice Silva', email: 'alice@example.com', createdAt: new Date('2025-01-01').toISOString() },
+    { id: 2, name: 'Bob Souza', email: 'bob@example.com', createdAt: new Date('2025-01-15').toISOString() },
   ];
-  nextId = 4;
+  nextId = 3;
 }
 
 module.exports = { getAllUsers, getUserById, createUser, resetUsers };
